@@ -167,13 +167,25 @@ func main() {
 
 	_, err = makefile.WriteString(
 		"EMCC = emcc\n" +
-			"CFLAGS = -Wall -O2 -std=c99\n" +
+			"CFLAGS = -Wall -O2 -std=c99 -D" + api + "\n" +
 			"INCLUDES = -Isokol\n" +
 			"SOURCES_C = main.c\n" +
-			"\n\n" +
+			"SOURCES_M = main.m\n" +
+			"\n" +
+			"UNAME_S := $(shell uname -s)\n" +
+			"\n" +
 			"LIBS = -lm -lopengl32 -lgdi32\n" +
-			"\n\n" +
+			"\n" +
+			"ifeq ($(UNAME_S), Darwin)\n" +
+			"\tLIBS = -framework Cocoa -framework QuartzCore -framework OpenGL -framework AudioToolbox -framework Metal -framework MetalKit\n" +
+			"\tCC = clang\n" +
+			"endif\n" +
+			"\n" +
 			"WASM_OBJS = $(SOURCES_C:.c=.wasm.o)\n" +
+			"\n" +
+			"CC = gcc\n" +
+			"NATIVE_OBJS = $(SOURCES_C:.c=native.o)\n" +
+			"OUTPUT_NATIVE = sokol_native\n" +
 			"\n" +
 			"wasm: CC=$(EMCC)\n" +
 			"wasm: CFLAGS += -D" + api + " -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -sASSERTIONS -s ASYNCIFY\n" +
@@ -184,11 +196,32 @@ func main() {
 			"wasm: $(WASM_OBJS)\n" +
 			"\t$(EMCC) $(CFLAGS) $(INCLUDES) $^ -o sokol.js --shell-file $(SHELL_FILE) $(LIBS)\n" +
 			"\n\n" +
+			"native:\n" +
+			"ifeq ($(UNAME_S), Darwin)\n" +
+			"\t$(MAKE) rename_c_to_m $(SOURCES_M)\n" +
+			"\t$(CC) $(CFLAGS) $(INCLUDES) $(SOURCES_M) -o $(OUTPUT_NATIVE) $(LIBS)\n" +
+			"\t$(MAKE) restore_c_files\n" +
+			"else\n" +
+			"\t$(CC) $(CFLAGS) $(INCLUDES) $^ -o $(OUTPUT_NATIVE) $(LIBS)\n" +
+			"endif\n" +
+			"\n" +
+			"rename_c_to_m:\n" +
+			"\t@mv $(SOURCES_C) $(SOURCES_M)\n" +
+			"\n" +
+			"restore_c_files:\n" +
+			"\t@mv $(SOURCES_M) $(SOURCES_C)\n" +
+			"\n" +
+			"%.native.o: %.c\n" +
+			"\t$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@\n" +
+			"\n" +
 			"%.0: %.c\n" +
 			"\t$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@\n" +
 			"\n" +
 			"%.wasm.o: %.c\n" +
-			"\t$(EMCC) $(CFLAGS) $(INCLUDES) -c $< -o $@\n",
+			"\t$(EMCC) $(CFLAGS) $(INCLUDES) -c $< -o $@\n" +
+			"\n" +
+			"clean:\n" +
+			"\trm -f *.native.o *.wasm.o $(OUTPUT_NATIVE) sokol.js $(OUTPUT_WASM)\n",
 	)
 	if err != nil {
 		fmt.Println("Error writing to file")
